@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import json
+import re
 import time
 from typing import Optional, AsyncGenerator, List, Dict, Any
 from ..core.logger import debug_logger
@@ -11,568 +12,376 @@ from .file_cache import FileCache
 
 
 # Model configuration
+# Supported Aspect Ratios with constants
+SUPPORTED_RATIOS = {
+    "16:9": {
+        "image": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+        "video": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "is_portrait": False
+    },
+    "9:16": {
+        "image": "IMAGE_ASPECT_RATIO_PORTRAIT",
+        "video": "VIDEO_ASPECT_RATIO_PORTRAIT",
+        "is_portrait": True
+    },
+    "1:1": {
+        "image": "IMAGE_ASPECT_RATIO_SQUARE",
+        "video": "VIDEO_ASPECT_RATIO_SQUARE", # 尝试使用Square,如果不支持可能需要回退
+        "is_portrait": False
+    },
+    "4:3": {
+        "image": "IMAGE_ASPECT_RATIO_LANDSCAPE_FOUR_THREE",
+        "video": "VIDEO_ASPECT_RATIO_LANDSCAPE", # Video暂无4:3,回退到Land
+        "is_portrait": False
+    },
+    "3:4": {
+        "image": "IMAGE_ASPECT_RATIO_PORTRAIT_THREE_FOUR",
+        "video": "VIDEO_ASPECT_RATIO_PORTRAIT", # Video暂无3:4,回退到Port
+        "is_portrait": True
+    },
+    # 21:9 and 9:21 could be added if needed, mapping to standard Landscape/Portrait
+}
+
+DEFAULT_RATIO = "1:1"
+
+# Model configuration
 MODEL_CONFIG = {
-    # 图片生成 - GEM_PIX (Gemini 2.5 Flash)
-    "gemini-2.5-flash-image-landscape": {
+    # ========== 图片生成 ==========
+    
+    # Gemini 2.5 Flash
+    "gemini-2.5-flash-image": {
         "type": "image",
-        "model_name": "GEM_PIX",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
+        "model_name": "GEM_PIX"
     },
-    "gemini-2.5-flash-image-portrait": {
+    
+    # Gemini 3.0 Pro & Variants
+    "gemini-3.0-pro-image": {
         "type": "image",
-        "model_name": "GEM_PIX",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT"
+        "model_name": "GEM_PIX_2"
     },
-
-    # 图片生成 - GEM_PIX_2 (Gemini 3.0 Pro)
-    "gemini-3.0-pro-image-landscape": {
+    "gemini-3.0-pro-image-2k": {
         "type": "image",
         "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
-    },
-    "gemini-3.0-pro-image-portrait": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT"
-    },
-    "gemini-3.0-pro-image-square": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_SQUARE"
-    },
-    "gemini-3.0-pro-image-four-three": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE_FOUR_THREE"
-    },
-    "gemini-3.0-pro-image-three-four": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT_THREE_FOUR"
-    },
-
-    # 图片生成 - GEM_PIX_2 (Gemini 3.0 Pro) 2K 放大版
-    "gemini-3.0-pro-image-landscape-2k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
         "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
     },
-    "gemini-3.0-pro-image-portrait-2k": {
+    "gemini-3.0-pro-image-4k": {
         "type": "image",
         "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
-    },
-    "gemini-3.0-pro-image-square-2k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_SQUARE",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
-    },
-    "gemini-3.0-pro-image-four-three-2k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE_FOUR_THREE",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
-    },
-    "gemini-3.0-pro-image-three-four-2k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT_THREE_FOUR",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
-    },
-
-    # 图片生成 - GEM_PIX_2 (Gemini 3.0 Pro) 4K 放大版
-    "gemini-3.0-pro-image-landscape-4k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
         "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
     },
-    "gemini-3.0-pro-image-portrait-4k": {
+    
+    # Imagen 3.5/4.0
+    "imagen-4.0-generate-preview": {
         "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
+        "model_name": "IMAGEN_3_5"
     },
-    "gemini-3.0-pro-image-square-4k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_SQUARE",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
-    },
-    "gemini-3.0-pro-image-four-three-4k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE_FOUR_THREE",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
-    },
-    "gemini-3.0-pro-image-three-four-4k": {
-        "type": "image",
-        "model_name": "GEM_PIX_2",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT_THREE_FOUR",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
-    },
-
-    # 图片生成 - IMAGEN_3_5 (Imagen 4.0)
-    "imagen-4.0-generate-preview-landscape": {
-        "type": "image",
-        "model_name": "IMAGEN_3_5",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
-    },
-    "imagen-4.0-generate-preview-portrait": {
-        "type": "image",
-        "model_name": "IMAGEN_3_5",
-        "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT"
-    },
-
-    # ========== 文生视频 (T2V - Text to Video) ==========
-    # 不支持上传图片，只使用文本提示词生成
-
-    # veo_3_1_t2v_fast_portrait (竖屏)
-    # 上游模型名: veo_3_1_t2v_fast_portrait
-    "veo_3_1_t2v_fast_portrait": {
+    
+    # ========== 文生视频 (T2V) ==========
+    
+    # Veo 3.1 Fast & Variants
+    "veo_3_1_t2v_fast": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+        "model_key": {
+            "default": "veo_3_1_t2v_fast",
+            "portrait": "veo_3_1_t2v_fast_portrait"
+        },
         "supports_images": False
     },
-    # veo_3_1_t2v_fast_landscape (横屏)
-    # 上游模型名: veo_3_1_t2v_fast
-    "veo_3_1_t2v_fast_landscape": {
+    "veo_3_1_t2v_fast-1080p": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False
+        "model_key": {
+            "default": "veo_3_1_t2v_fast",
+            "portrait": "veo_3_1_t2v_fast_portrait"
+        },
+        "supports_images": False,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
     },
-
-    # veo_2_1_fast_d_15_t2v (需要新增横竖屏)
-    "veo_2_1_fast_d_15_t2v_portrait": {
+    "veo_3_1_t2v_fast-4k": {
+        "type": "video",
+        "video_type": "t2v",
+        "model_key": {
+            "default": "veo_3_1_t2v_fast",
+            "portrait": "veo_3_1_t2v_fast_portrait"
+        },
+        "supports_images": False,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
+    # Veo 2.1 Fast
+    "veo_2_1_fast_d_15_t2v": {
         "type": "video",
         "video_type": "t2v",
         "model_key": "veo_2_1_fast_d_15_t2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": False
     },
-    "veo_2_1_fast_d_15_t2v_landscape": {
+    
+    # Veo 2.0
+    "veo_2_0_t2v": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_2_1_fast_d_15_t2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": "veo_2_0_t2v", 
         "supports_images": False
     },
-
-    # veo_2_0_t2v (需要新增横竖屏)
-    "veo_2_0_t2v_portrait": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_2_0_t2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False
-    },
-    "veo_2_0_t2v_landscape": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_2_0_t2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False
-    },
-
-    # veo_3_1_t2v_fast_ultra (横竖屏)
-    "veo_3_1_t2v_fast_portrait_ultra": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False
-    },
+    
+    # Veo 3.1 Ultra (Relaxed/P) & Variants
     "veo_3_1_t2v_fast_ultra": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_t2v_fast_ultra",
+            "portrait": "veo_3_1_t2v_fast_portrait_ultra"
+        },
         "supports_images": False
     },
-
-    # veo_3_1_t2v_fast_ultra_relaxed (横竖屏)
-    "veo_3_1_t2v_fast_portrait_ultra_relaxed": {
+    "veo_3_1_t2v_fast_ultra-1080p": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False
+        "model_key": {
+            "default": "veo_3_1_t2v_fast_ultra",
+            "portrait": "veo_3_1_t2v_fast_portrait_ultra"
+        },
+        "supports_images": False,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
     },
+    "veo_3_1_t2v_fast_ultra-4k": {
+        "type": "video",
+        "video_type": "t2v",
+        "model_key": {
+            "default": "veo_3_1_t2v_fast_ultra",
+            "portrait": "veo_3_1_t2v_fast_portrait_ultra"
+        },
+        "supports_images": False,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
     "veo_3_1_t2v_fast_ultra_relaxed": {
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_t2v_fast_ultra_relaxed",
+            "portrait": "veo_3_1_t2v_fast_portrait_ultra_relaxed"
+        },
         "supports_images": False
     },
-
-    # veo_3_1_t2v (横竖屏)
-    "veo_3_1_t2v_portrait": {
+    
+    "veo_3_1_t2v": { # Standard non-fast?
         "type": "video",
         "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_portrait",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False
-    },
-    "veo_3_1_t2v_landscape": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_t2v",
+            "portrait": "veo_3_1_t2v_portrait"
+        },
         "supports_images": False
     },
 
-    # ========== 首尾帧模型 (I2V - Image to Video) ==========
-    # 支持1-2张图片：1张作为首帧，2张作为首尾帧
-
-    # veo_3_1_i2v_s_fast_fl (需要新增横竖屏)
-    "veo_3_1_i2v_s_fast_portrait_fl": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_portrait_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2
-    },
+    # ========== 图生视频 (I2V) ==========
+    
+    # Veo 3.1 Fast I2V & Variants
     "veo_3_1_i2v_s_fast_fl": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_fl"
+        },
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
-
-    # veo_2_1_fast_d_15_i2v (需要新增横竖屏)
-    "veo_2_1_fast_d_15_i2v_portrait": {
+    "veo_3_1_i2v_s_fast_fl-1080p": {
+        "type": "video",
+        "video_type": "i2v",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_fl"
+        },
+        "supports_images": True,
+        "min_images": 1,
+        "max_images": 2,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
+    },
+    "veo_3_1_i2v_s_fast_fl-4k": {
+        "type": "video",
+        "video_type": "i2v",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_fl"
+        },
+        "supports_images": True,
+        "min_images": 1,
+        "max_images": 2,
+         "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
+    # Veo 2.1 I2V
+    "veo_2_1_fast_d_15_i2v": {
         "type": "video",
         "video_type": "i2v",
         "model_key": "veo_2_1_fast_d_15_i2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
-    "veo_2_1_fast_d_15_i2v_landscape": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_2_1_fast_d_15_i2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2
-    },
-
-    # veo_2_0_i2v (需要新增横竖屏)
-    "veo_2_0_i2v_portrait": {
+    
+    # Veo 2.0 I2V
+    "veo_2_0_i2v": {
         "type": "video",
         "video_type": "i2v",
         "model_key": "veo_2_0_i2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
-    "veo_2_0_i2v_landscape": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_2_0_i2v",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2
-    },
-
-    # veo_3_1_i2v_s_fast_ultra (横竖屏)
-    "veo_3_1_i2v_s_fast_portrait_ultra_fl": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_portrait_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2
-    },
+    
+    # Veo 3.1 Ultra I2V & Variants
     "veo_3_1_i2v_s_fast_ultra_fl": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_ultra_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_ultra_fl"
+        },
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
-
-    # veo_3_1_i2v_s_fast_ultra_relaxed (需要新增横竖屏)
-    "veo_3_1_i2v_s_fast_portrait_ultra_relaxed": {
+    "veo_3_1_i2v_s_fast_ultra_fl-1080p": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_portrait_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_ultra_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_ultra_fl"
+        },
         "supports_images": True,
         "min_images": 1,
-        "max_images": 2
+        "max_images": 2,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
     },
+    "veo_3_1_i2v_s_fast_ultra_fl-4k": {
+         "type": "video",
+        "video_type": "i2v",
+        "model_key": {
+            "default": "veo_3_1_i2v_s_fast_ultra_fl",
+            "portrait": "veo_3_1_i2v_s_fast_portrait_ultra_fl"
+        },
+        "supports_images": True,
+        "min_images": 1,
+        "max_images": 2,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
     "veo_3_1_i2v_s_fast_ultra_relaxed": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+             "default": "veo_3_1_i2v_s_fast_ultra_relaxed",
+             "portrait": "veo_3_1_i2v_s_fast_portrait_ultra_relaxed"
+        },
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
-
-    # veo_3_1_i2v_s (需要新增横竖屏)
-    "veo_3_1_i2v_s_portrait": {
+    
+    "veo_3_1_i2v_s": {
         "type": "video",
         "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2
-    },
-    "veo_3_1_i2v_s_landscape": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+            "default": "veo_3_1_i2v_s",
+            "portrait": "veo_3_1_i2v_s_portrait"
+        },
         "supports_images": True,
         "min_images": 1,
         "max_images": 2
     },
 
-    # ========== 多图生成 (R2V - Reference Images to Video) ==========
-    # 支持多张图片,不限制数量
-
-    # veo_3_1_r2v_fast (横竖屏)
-    "veo_3_1_r2v_fast_portrait": {
-        "type": "video",
-        "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_portrait",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 0,
-        "max_images": None  # 不限制
-    },
+    # ========== 多图生成 (R2V) ==========
+    
+    # Veo 3.1 Fast R2V & Variants
     "veo_3_1_r2v_fast": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        "model_key": {
+             "default": "veo_3_1_r2v_fast",
+             "portrait": "veo_3_1_r2v_fast_portrait"
+        },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None  # 不限制
+        "max_images": None
     },
-
-    # veo_3_1_r2v_fast_ultra (横竖屏)
-    "veo_3_1_r2v_fast_portrait_ultra": {
+    "veo_3_1_r2v_fast-1080p": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+        "model_key": {
+             "default": "veo_3_1_r2v_fast",
+             "portrait": "veo_3_1_r2v_fast_portrait"
+        },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None  # 不限制
+        "max_images": None,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
     },
+    "veo_3_1_r2v_fast-4k": {
+        "type": "video",
+        "video_type": "r2v",
+        "model_key": {
+             "default": "veo_3_1_r2v_fast",
+             "portrait": "veo_3_1_r2v_fast_portrait"
+        },
+        "supports_images": True,
+        "min_images": 0,
+        "max_images": None,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
     "veo_3_1_r2v_fast_ultra": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+          "model_key": {
+             "default": "veo_3_1_r2v_fast_ultra",
+             "portrait": "veo_3_1_r2v_fast_portrait_ultra"
+        },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None  # 不限制
+        "max_images": None
     },
-
-    # veo_3_1_r2v_fast_ultra_relaxed (横竖屏)
-    "veo_3_1_r2v_fast_portrait_ultra_relaxed": {
+    "veo_3_1_r2v_fast_ultra-1080p": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+          "model_key": {
+             "default": "veo_3_1_r2v_fast_ultra",
+             "portrait": "veo_3_1_r2v_fast_portrait_ultra"
+        },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None  # 不限制
+        "max_images": None,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
     },
+    "veo_3_1_r2v_fast_ultra-4k": {
+        "type": "video",
+        "video_type": "r2v",
+          "model_key": {
+             "default": "veo_3_1_r2v_fast_ultra",
+             "portrait": "veo_3_1_r2v_fast_portrait_ultra"
+        },
+        "supports_images": True,
+        "min_images": 0,
+        "max_images": None,
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+    },
+    
     "veo_3_1_r2v_fast_ultra_relaxed": {
         "type": "video",
         "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_ultra_relaxed",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+         "model_key": {
+             "default": "veo_3_1_r2v_fast_ultra_relaxed",
+             "portrait": "veo_3_1_r2v_fast_portrait_ultra_relaxed"
+        },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None  # 不限制
+        "max_images": None
     },
-
-    # ========== 视频放大 (Video Upsampler) ==========
-    # 仅 3.1 支持，需要先生成视频后再放大，可能需要 30 分钟
-
-    # T2V 4K 放大版
-    "veo_3_1_t2v_fast_portrait_4k": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-    "veo_3_1_t2v_fast_4k": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-    "veo_3_1_t2v_fast_portrait_ultra_4k": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-    "veo_3_1_t2v_fast_ultra_4k": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-
-    # T2V 1080P 放大版
-    "veo_3_1_t2v_fast_portrait_1080p": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-    "veo_3_1_t2v_fast_1080p": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-    "veo_3_1_t2v_fast_portrait_ultra_1080p": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-    "veo_3_1_t2v_fast_ultra_1080p": {
-        "type": "video",
-        "video_type": "t2v",
-        "model_key": "veo_3_1_t2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-
-    # I2V 4K 放大版
-    "veo_3_1_i2v_s_fast_portrait_ultra_fl_4k": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_portrait_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-    "veo_3_1_i2v_s_fast_ultra_fl_4k": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-
-    # I2V 1080P 放大版
-    "veo_3_1_i2v_s_fast_portrait_ultra_fl_1080p": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_portrait_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-    "veo_3_1_i2v_s_fast_ultra_fl_1080p": {
-        "type": "video",
-        "video_type": "i2v",
-        "model_key": "veo_3_1_i2v_s_fast_ultra_fl",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 1,
-        "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-
-    # R2V 4K 放大版
-    "veo_3_1_r2v_fast_portrait_ultra_4k": {
-        "type": "video",
-        "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 0,
-        "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-    "veo_3_1_r2v_fast_ultra_4k": {
-        "type": "video",
-        "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 0,
-        "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
-    },
-
-    # R2V 1080P 放大版
-    "veo_3_1_r2v_fast_portrait_ultra_1080p": {
-        "type": "video",
-        "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": True,
-        "min_images": 0,
-        "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    },
-    "veo_3_1_r2v_fast_ultra_1080p": {
-        "type": "video",
-        "video_type": "r2v",
-        "model_key": "veo_3_1_r2v_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": True,
-        "min_images": 0,
-        "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
-    }
 }
 
 
@@ -590,6 +399,54 @@ class GenerationHandler:
             default_timeout=config.cache_timeout,
             proxy_manager=proxy_manager
         )
+
+    def extract_aspect_ratio_from_prompt(self, prompt: str) -> tuple[str, str, dict]:
+        """
+        从提示词中提取宽高比
+        返回: (cleaned_prompt, ratio_str, ratio_config)
+        """
+        if not prompt:
+            return prompt, DEFAULT_RATIO, SUPPORTED_RATIOS[DEFAULT_RATIO]
+
+        # 1. Regex match for "16:9", "16：9"
+        # Match standalone ratio or at end of string
+        ratio_pattern = r"(?:^|\s)(\d+[：:]\d+)(?:\s|$)"
+        matches = list(re.finditer(ratio_pattern, prompt))
+
+        found_ratio = None
+        found_match = None
+
+        if matches:
+             # Iterate to find supported ratio
+             for match in matches:
+                 r = match.group(1).replace("：", ":")
+                 if r in SUPPORTED_RATIOS:
+                     found_ratio = r
+                     found_match = match
+                     break
+        
+        # 2. If not found, check for no-space (e.g. "Cat16:9") - unlikely but supported in reference
+        if not found_ratio:
+             ratio_pattern_nospace = r"(\d+[：:]\d+)"
+             matches_ns = list(re.finditer(ratio_pattern_nospace, prompt))
+             for match in matches_ns:
+                 r = match.group(1).replace("：", ":")
+                 if r in SUPPORTED_RATIOS:
+                     found_ratio = r
+                     found_match = match
+                     break
+
+        # 3. Clean prompt
+        if found_ratio and found_match:
+            # Remove the match from prompt
+            span = found_match.span()
+            cleaned_prompt = prompt[:span[0]] + " " + prompt[span[1]:]
+            cleaned_prompt = re.sub(r"\s+", " ", cleaned_prompt).strip()
+            
+            config = SUPPORTED_RATIOS[found_ratio]
+            return cleaned_prompt, found_ratio, config
+
+        return prompt.strip(), DEFAULT_RATIO, SUPPORTED_RATIOS[DEFAULT_RATIO]
 
     async def check_token_availability(self, is_image: bool, is_video: bool) -> bool:
         """检查Token可用性
@@ -625,16 +482,83 @@ class GenerationHandler:
         start_time = time.time()
         token = None
 
-        # 1. 验证模型
-        if model not in MODEL_CONFIG:
-            error_msg = f"不支持的模型: {model}"
-            debug_logger.log_error(error_msg)
-            yield self._create_error_response(error_msg)
-            return
+        # 1. Extract Aspect Ratio directly from prompt
+        prompt, ratio_str, ratio_config = self.extract_aspect_ratio_from_prompt(prompt)
+        
+        # Determine is_portrait for later use (Video model key selection)
+        is_portrait = ratio_config.get("is_portrait", False)
 
-        model_config = MODEL_CONFIG[model]
+        # 2. Resolve Model and Upsample Config
+        # Strategy: Prefer exact match in MODEL_CONFIG.
+        # If not found, try stripping suffixes (-4k/-2k/-1080p) to find a base model.
+        
+        if model in MODEL_CONFIG:
+            model_config = MODEL_CONFIG[model].copy()
+            base_model = model
+        else:
+            # Fallback: Suffix Stripping
+            base_model = model
+            upsample_resolution = None
+            
+            # Supported suffixes logic
+            if model.endswith("-4k"):
+                base_model = model[:-3]
+                upsample_resolution = "VIDEO_RESOLUTION_4K" 
+            elif model.endswith("-2k"):
+                base_model = model[:-3]
+            elif model.endswith("-1080p"):
+                base_model = model[:-6]
+                upsample_resolution = "VIDEO_RESOLUTION_1080P"
+
+            if base_model not in MODEL_CONFIG:
+                error_msg = f"不支持的模型: {model} (Base: {base_model})"
+                debug_logger.log_error(error_msg)
+                yield self._create_error_response(error_msg)
+                return
+
+            model_config = MODEL_CONFIG[base_model].copy() # Copy to modify
+            
+            # Apply dynamic upsample config if we had to strip suffix
+            if upsample_resolution:
+                 CONFIG_UPSAMPLE_KEY_MAP = {
+                     "VIDEO_RESOLUTION_4K": "veo_3_1_upsampler_4k",
+                     "VIDEO_RESOLUTION_1080P": "veo_3_1_upsampler_1080p"
+                 }
+                 
+                 generation_type = model_config["type"]
+                 if generation_type == "image":
+                     if model.endswith("-4k"):
+                         model_config["upsample"] = "UPSAMPLE_IMAGE_RESOLUTION_4K"
+                     elif model.endswith("-2k"):
+                         model_config["upsample"] = "UPSAMPLE_IMAGE_RESOLUTION_2K"
+                 else: # Video
+                     suffix = "4k" if "4K" in upsample_resolution else "1080p"
+                     model_config["upsample"] = {
+                         "resolution": upsample_resolution,
+                         "model_key": f"veo_3_1_upsampler_{suffix}"
+                     }
+
         generation_type = model_config["type"]
-        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {model}, 类型: {generation_type}, Prompt: {prompt[:50]}...")
+        
+        # Resolve Internal Aspect Ratio Type
+        if generation_type == "image":
+             internal_ratio = ratio_config["image"]
+             # Note: Image Upsample is already in config if exact match, or added above if dynamic
+                 
+        else: # video
+             internal_ratio = ratio_config["video"]
+             # Note: Video Upsample is already in config if exact match, or added above if dynamic
+
+             # Resolve Video Model Key based on Portrait/Landscape
+             # If model_key is a dict, resolve it
+             if isinstance(model_config.get("model_key"), dict):
+                 key_map = model_config["model_key"]
+                 if is_portrait and "portrait" in key_map:
+                     model_config["model_key"] = key_map["portrait"]
+                 else:
+                     model_config["model_key"] = key_map.get("default", key_map.get("portrait", "")) # Fallback
+        
+        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {base_model}, 类型: {generation_type}, 比例: {ratio_str}, Prompt: {prompt[:50]}...")
 
         # 非流式模式: 只检查可用性
         if not stream:
@@ -659,7 +583,7 @@ class GenerationHandler:
         # 向用户展示开始信息
         if stream:
             yield self._create_stream_chunk(
-                f"✨ {'视频' if generation_type == 'video' else '图片'}生成任务已启动\n",
+                f"✨ {'视频' if generation_type == 'video' else '图片'}生成任务已启动 (比例: {ratio_str})\n",
                 role="assistant"
             )
 
@@ -708,13 +632,13 @@ class GenerationHandler:
             if generation_type == "image":
                 debug_logger.log_info(f"[GENERATION] 开始图片生成流程...")
                 async for chunk in self._handle_image_generation(
-                    token, project_id, model_config, prompt, images, stream
+                    token, project_id, model_config, prompt, images, stream, internal_ratio
                 ):
                     yield chunk
             else:  # video
                 debug_logger.log_info(f"[GENERATION] 开始视频生成流程...")
                 async for chunk in self._handle_video_generation(
-                    token, project_id, model_config, prompt, images, stream
+                    token, project_id, model_config, prompt, images, stream, internal_ratio
                 ):
                     yield chunk
 
@@ -734,7 +658,8 @@ class GenerationHandler:
             response_data = {
                 "status": "success",
                 "model": model,
-                "prompt": prompt[:100]
+                "prompt": prompt[:100],
+                "ratio": ratio_str
             }
 
             # 添加生成的URL（如果有）
@@ -787,7 +712,8 @@ class GenerationHandler:
         model_config: dict,
         prompt: str,
         images: Optional[List[bytes]],
-        stream: bool
+        stream: bool,
+        aspect_ratio: str
     ) -> AsyncGenerator:
         """处理图片生成 (同步返回)"""
 
@@ -809,7 +735,7 @@ class GenerationHandler:
                     media_id = await self.flow_client.upload_image(
                         token.at,
                         image_bytes,
-                        model_config["aspect_ratio"]
+                        aspect_ratio
                     )
                     image_inputs.append({
                         "name": media_id,
@@ -827,7 +753,7 @@ class GenerationHandler:
                 project_id=project_id,
                 prompt=prompt,
                 model_name=model_config["model_name"],
-                aspect_ratio=model_config["aspect_ratio"],
+                aspect_ratio=aspect_ratio,
                 image_inputs=image_inputs
             )
 
@@ -975,7 +901,8 @@ class GenerationHandler:
         model_config: dict,
         prompt: str,
         images: Optional[List[bytes]],
-        stream: bool
+        stream: bool,
+        aspect_ratio: str
     ) -> AsyncGenerator:
         """处理视频生成 (异步轮询)"""
 
@@ -1071,7 +998,7 @@ class GenerationHandler:
                     if stream:
                         yield self._create_stream_chunk("上传首帧图片...\n")
                     start_media_id = await self.flow_client.upload_image(
-                        token.at, images[0], model_config["aspect_ratio"]
+                        token.at, images[0], aspect_ratio
                     )
                     debug_logger.log_info(f"[I2V] 仅上传首帧: {start_media_id}")
 
@@ -1080,10 +1007,10 @@ class GenerationHandler:
                     if stream:
                         yield self._create_stream_chunk("上传首帧和尾帧图片...\n")
                     start_media_id = await self.flow_client.upload_image(
-                        token.at, images[0], model_config["aspect_ratio"]
+                        token.at, images[0], aspect_ratio
                     )
                     end_media_id = await self.flow_client.upload_image(
-                        token.at, images[1], model_config["aspect_ratio"]
+                        token.at, images[1], aspect_ratio
                     )
                     debug_logger.log_info(f"[I2V] 上传首尾帧: {start_media_id}, {end_media_id}")
 
@@ -1094,7 +1021,7 @@ class GenerationHandler:
 
                 for idx, img in enumerate(images):  # 上传所有图片,不限制数量
                     media_id = await self.flow_client.upload_image(
-                        token.at, img, model_config["aspect_ratio"]
+                        token.at, img, aspect_ratio
                     )
                     reference_images.append({
                         "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
@@ -1115,7 +1042,7 @@ class GenerationHandler:
                         project_id=project_id,
                         prompt=prompt,
                         model_key=model_config["model_key"],
-                        aspect_ratio=model_config["aspect_ratio"],
+                        aspect_ratio=aspect_ratio,
                         start_media_id=start_media_id,
                         end_media_id=end_media_id,
                         user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
@@ -1131,7 +1058,7 @@ class GenerationHandler:
                         project_id=project_id,
                         prompt=prompt,
                         model_key=actual_model_key,
-                        aspect_ratio=model_config["aspect_ratio"],
+                        aspect_ratio=aspect_ratio,
                         start_media_id=start_media_id,
                         user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
                     )
@@ -1143,7 +1070,7 @@ class GenerationHandler:
                     project_id=project_id,
                     prompt=prompt,
                     model_key=model_config["model_key"],
-                    aspect_ratio=model_config["aspect_ratio"],
+                    aspect_ratio=aspect_ratio,
                     reference_images=reference_images,
                     user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
                 )
@@ -1155,7 +1082,7 @@ class GenerationHandler:
                     project_id=project_id,
                     prompt=prompt,
                     model_key=model_config["model_key"],
-                    aspect_ratio=model_config["aspect_ratio"],
+                    aspect_ratio=aspect_ratio,
                     user_paygate_tier=token.user_paygate_tier or "PAYGATE_TIER_ONE"
                 )
 
