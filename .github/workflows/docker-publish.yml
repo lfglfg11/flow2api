@@ -1,21 +1,16 @@
-# 1. 切换到 gbf 分支
-git checkout gbf
-
-# 2. 修复工作流文件（覆盖错误内容）
-cat > .github/workflows/docker-publish.yml << 'EOF'
 name: Build and Push Docker Image
 
 on:
   push:
     branches:
       - main
-      - gbf  # ← 正确添加 gbf 分支
+      - gbf
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
-      - gbf  # ← 正确添加 gbf 分支
+      - gbf
   workflow_dispatch:
 
 env:
@@ -69,9 +64,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-EOF
-
-# 3. 提交修复
-git add .github/workflows/docker-publish.yml
-git commit -m "fix: correct workflow syntax for gbf branch"
-git push origin gbf
