@@ -63,13 +63,13 @@ MODEL_CONFIG = {
         "type": "image",
         "model_name": "GEM_PIX_2",
         "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K",
-        "required_tier": "PAYGATE_TIER_TWO"
+        "required_tier": "pro"
     },
     "gemini-3.0-pro-image-4k": {
         "type": "image",
         "model_name": "GEM_PIX_2",
         "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K",
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     
     # Imagen 3.5/4.0
@@ -109,7 +109,7 @@ MODEL_CONFIG = {
         },
         "supports_images": False,
         "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     
     # Veo 2.1 Fast
@@ -137,7 +137,7 @@ MODEL_CONFIG = {
             "portrait": "veo_3_1_t2v_fast_portrait_ultra"
         },
         "supports_images": False,
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     "veo_3_1_t2v_fast_ultra-1080p": {
         "type": "video",
@@ -148,7 +148,7 @@ MODEL_CONFIG = {
         },
         "supports_images": False,
         "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"},
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     "veo_3_1_t2v_fast_ultra-4k": {
         "type": "video",
@@ -158,7 +158,8 @@ MODEL_CONFIG = {
             "portrait": "veo_3_1_t2v_fast_portrait_ultra"
         },
         "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "ultra"
     },
     
     "veo_3_1_t2v_fast_ultra_relaxed": {
@@ -168,7 +169,8 @@ MODEL_CONFIG = {
             "default": "veo_3_1_t2v_fast_ultra_relaxed",
             "portrait": "veo_3_1_t2v_fast_portrait_ultra_relaxed"
         },
-        "supports_images": False
+        "supports_images": False,
+        "required_tier": "ultra"
     },
     
     "veo_3_1_t2v": { # Standard non-fast?
@@ -250,7 +252,8 @@ MODEL_CONFIG = {
         },
         "supports_images": True,
         "min_images": 1,
-        "max_images": 2
+        "max_images": 2,
+        "required_tier": "ultra"
     },
     "veo_3_1_i2v_s_fast_ultra_fl-1080p": {
         "type": "video",
@@ -262,7 +265,8 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 1,
         "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"},
+        "required_tier": "ultra"
     },
     "veo_3_1_i2v_s_fast_ultra_fl-4k": {
          "type": "video",
@@ -274,7 +278,8 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 1,
         "max_images": 2,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "ultra"
     },
     
     "veo_3_1_i2v_s_fast_ultra_relaxed": {
@@ -286,7 +291,8 @@ MODEL_CONFIG = {
         },
         "supports_images": True,
         "min_images": 1,
-        "max_images": 2
+        "max_images": 2,
+        "required_tier": "ultra"
     },
     
     "veo_3_1_i2v_s": {
@@ -338,7 +344,7 @@ MODEL_CONFIG = {
         "min_images": 0,
         "max_images": None,
         "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     
     "veo_3_1_r2v_fast_ultra": {
@@ -351,7 +357,7 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 0,
         "max_images": None,
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     "veo_3_1_r2v_fast_ultra-1080p": {
         "type": "video",
@@ -364,7 +370,7 @@ MODEL_CONFIG = {
         "min_images": 0,
         "max_images": None,
         "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"},
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
     "veo_3_1_r2v_fast_ultra-4k": {
         "type": "video",
@@ -377,7 +383,8 @@ MODEL_CONFIG = {
         "min_images": 0,
         "max_images": None,
         "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
-        "required_tier": "PAYGATE_TIER_THREE"
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "ultra"
     },
     
     "veo_3_1_r2v_fast_ultra_relaxed": {
@@ -390,7 +397,7 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 0,
         "max_images": None,
-        "required_tier": "PAYGATE_TIER_THREE"
+        "required_tier": "ultra"
     },
 }
 
@@ -614,14 +621,15 @@ class GenerationHandler:
                 else:
                     message = "没有可用的Token进行视频生成"
 
-            yield self._create_completion_response(message, is_availability_check=True)
+            yield self._create_completion_response(message, is_availability_check=True, model=model)
             return
 
         # 向用户展示开始信息
         if stream:
             yield self._create_stream_chunk(
                 f"✨ {'视频' if generation_type == 'video' else '图片'}生成任务已启动 (比例: {ratio_str})\n",
-                role="assistant"
+                role="assistant",
+                model=model
             )
 
         # 2. 选择Token
@@ -638,7 +646,7 @@ class GenerationHandler:
             error_msg = self._get_no_token_error_message(generation_type)
             debug_logger.log_error(f"[GENERATION] {error_msg}")
             if stream:
-                yield self._create_stream_chunk(f"❌ {error_msg}\n")
+                yield self._create_stream_chunk(f"❌ {error_msg}\n", model=model)
             yield self._create_error_response(error_msg)
             return
 
@@ -671,13 +679,13 @@ class GenerationHandler:
             if generation_type == "image":
                 debug_logger.log_info(f"[GENERATION] 开始图片生成流程...")
                 async for chunk in self._handle_image_generation(
-                    token, project_id, model_config, final_prompt, images, stream, internal_ratio
+                    token, project_id, model_config, final_prompt, images, stream, internal_ratio, model_name=model
                 ):
                     yield chunk
             else:  # video
                 debug_logger.log_info(f"[GENERATION] 开始视频生成流程...")
                 async for chunk in self._handle_video_generation(
-                    token, project_id, model_config, final_prompt, images, stream, internal_ratio
+                    token, project_id, model_config, final_prompt, images, stream, internal_ratio, model_name=model
                 ):
                     yield chunk
 
@@ -752,7 +760,8 @@ class GenerationHandler:
         prompt: str,
         images: Optional[List[bytes]],
         stream: bool,
-        aspect_ratio: str
+        aspect_ratio: str,
+        model_name: str = "flow2api"
     ) -> AsyncGenerator:
         """处理图片生成 (同步返回)"""
 
@@ -767,7 +776,7 @@ class GenerationHandler:
             image_inputs = []
             if images and len(images) > 0:
                 if stream:
-                    yield self._create_stream_chunk(f"上传 {len(images)} 张参考图片...\n")
+                    yield self._create_stream_chunk(f"上传 {len(images)} 张参考图片...\n", model=model_name)
 
                 # 支持多图输入
                 for idx, image_bytes in enumerate(images):
@@ -781,11 +790,11 @@ class GenerationHandler:
                         "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
                     })
                     if stream:
-                        yield self._create_stream_chunk(f"已上传第 {idx + 1}/{len(images)} 张图片\n")
+                        yield self._create_stream_chunk(f"已上传第 {idx + 1}/{len(images)} 张图片\n", model=model_name)
 
             # 调用生成API
             if stream:
-                yield self._create_stream_chunk("正在生成图片...\n")
+                yield self._create_stream_chunk("正在生成图片...\n", model=model_name)
 
             result = await self.flow_client.generate_image(
                 at=token.at,
@@ -810,7 +819,7 @@ class GenerationHandler:
             if upsample_resolution and media_id:
                 resolution_name = "4K" if "4K" in upsample_resolution else "2K"
                 if stream:
-                    yield self._create_stream_chunk(f"正在放大图片到 {resolution_name}...\n")
+                    yield self._create_stream_chunk(f"正在放大图片到 {resolution_name}...\n", model=model_name)
 
                 # 4K/2K 图片重试逻辑 - 最多重试3次
                 max_retries = 3
@@ -828,7 +837,7 @@ class GenerationHandler:
                             debug_logger.log_info(f"[UPSAMPLE] 图片已放大到 {resolution_name}")
 
                             if stream:
-                                yield self._create_stream_chunk(f"✅ 图片已放大到 {resolution_name}\n")
+                                yield self._create_stream_chunk(f"✅ 图片已放大到 {resolution_name}\n", model=model_name)
 
                             # 缓存放大后的图片 (如果启用)
                             # 日志统一记录原图URL (放大后的base64数据太大，不适合存储)
@@ -837,43 +846,47 @@ class GenerationHandler:
                             if config.cache_enabled:
                                 try:
                                     if stream:
-                                        yield self._create_stream_chunk(f"缓存 {resolution_name} 图片中...\n")
+                                        yield self._create_stream_chunk(f"缓存 {resolution_name} 图片中...\n", model=model_name)
                                     cached_filename = await self.file_cache.cache_base64_image(encoded_image, resolution_name)
                                     local_url = f"{self._get_base_url()}/tmp/{cached_filename}"
                                     if stream:
-                                        yield self._create_stream_chunk(f"✅ {resolution_name} 图片缓存成功\n")
+                                        yield self._create_stream_chunk(f"✅ {resolution_name} 图片缓存成功\n", model=model_name)
                                         yield self._create_stream_chunk(
                                             f"![Generated Image]({local_url})",
-                                            finish_reason="stop"
+                                            finish_reason="stop",
+                                            model=model_name
                                         )
                                     else:
                                         yield self._create_completion_response(
                                             local_url,
-                                            media_type="image"
+                                            media_type="image",
+                                            model=model_name
                                         )
                                     return
                                 except Exception as e:
                                     debug_logger.log_error(f"Failed to cache {resolution_name} image: {str(e)}")
                                     if stream:
-                                        yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}，返回 base64...\n")
+                                        yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}，返回 base64...\n", model=model_name)
 
                             # 缓存未启用或缓存失败，返回 base64 格式
                             base64_url = f"data:image/jpeg;base64,{encoded_image}"
                             if stream:
                                 yield self._create_stream_chunk(
                                     f"![Generated Image]({base64_url})",
-                                    finish_reason="stop"
+                                    finish_reason="stop",
+                                    model=model_name
                                 )
                             else:
                                 yield self._create_completion_response(
                                     base64_url,
-                                    media_type="image"
+                                    media_type="image",
+                                    model=model_name
                                 )
                             return
                         else:
                             debug_logger.log_warning("[UPSAMPLE] 返回结果为空")
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 放大失败，返回原图...\n")
+                                yield self._create_stream_chunk(f"⚠️ 放大失败，返回原图...\n", model=model_name)
                             break  # 空结果不重试
 
                     except Exception as e:
@@ -884,13 +897,13 @@ class GenerationHandler:
                         retry_reason = self.flow_client._get_retry_reason(error_str)
                         if retry_reason and retry_attempt < max_retries - 1:
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 放大遇到{retry_reason}，正在重试 ({retry_attempt + 2}/{max_retries})...\n")
+                                yield self._create_stream_chunk(f"⚠️ 放大遇到{retry_reason}，正在重试 ({retry_attempt + 2}/{max_retries})...\n", model=model_name)
                             # 等待一小段时间后重试
                             await asyncio.sleep(1)
                             continue
                         else:
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 放大失败: {error_str}，返回原图...\n")
+                                yield self._create_stream_chunk(f"⚠️ 放大失败: {error_str}，返回原图...\n", model=model_name)
                             break
 
             # 缓存图片 (如果启用)
@@ -898,20 +911,20 @@ class GenerationHandler:
             if config.cache_enabled:
                 try:
                     if stream:
-                        yield self._create_stream_chunk("缓存图片中...\n")
+                        yield self._create_stream_chunk("缓存图片中...\n", model=model_name)
                     cached_filename = await self.file_cache.download_and_cache(image_url, "image")
                     local_url = f"{self._get_base_url()}/tmp/{cached_filename}"
                     if stream:
-                        yield self._create_stream_chunk("✅ 图片缓存成功,准备返回缓存地址...\n")
+                        yield self._create_stream_chunk("✅ 图片缓存成功,准备返回缓存地址...\n", model=model_name)
                 except Exception as e:
                     debug_logger.log_error(f"Failed to cache image: {str(e)}")
                     # 缓存失败不影响结果返回,使用原始URL
                     local_url = image_url
                     if stream:
-                        yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}\n正在返回源链接...\n")
+                        yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}\n正在返回源链接...\n", model=model_name)
             else:
                 if stream:
-                    yield self._create_stream_chunk("缓存已关闭,正在返回源链接...\n")
+                    yield self._create_stream_chunk("缓存已关闭,正在返回源链接...\n", model=model_name)
 
             # 返回结果
             # 存储URL用于日志记录
@@ -920,12 +933,14 @@ class GenerationHandler:
             if stream:
                 yield self._create_stream_chunk(
                     f"![Generated Image]({local_url})",
-                    finish_reason="stop"
+                    finish_reason="stop",
+                    model=model_name
                 )
             else:
                 yield self._create_completion_response(
                     local_url,  # 直接传URL,让方法内部格式化
-                    media_type="image"
+                    media_type="image",
+                    model=model_name
                 )
 
         finally:
@@ -959,11 +974,14 @@ class GenerationHandler:
             max_images = model_config.get("max_images", 0)
 
             # 根据账号tier自动调整模型 key
+            # 根据账号tier自动调整模型 key
             model_key = model_config["model_key"]
-            user_tier = token.user_paygate_tier or "PAYGATE_TIER_ONE"
-
-            # TIER_TWO 账号需要使用 ultra 版本的模型
-            if user_tier == "PAYGATE_TIER_TWO":
+            
+            # 获取简化后的等级名 (ultra/pro/standard)
+            tier_name = self.load_balancer.RAW_TIER_MAP.get(token.user_paygate_tier, "standard")
+            
+            # Ultra 账号需要使用 ultra 版本的模型
+            if tier_name == "ultra":
                 # 如果模型 key 不包含 ultra，自动添加
                 if "ultra" not in model_key:
                     # veo_3_1_i2v_s_fast_fl -> veo_3_1_i2v_s_fast_ultra_fl
@@ -978,11 +996,11 @@ class GenerationHandler:
                         model_key = model_key + "_ultra"
                     
                     if stream:
-                        yield self._create_stream_chunk(f"TIER_TWO 账号自动切换到 ultra 模型: {model_key}\n")
-                    debug_logger.log_info(f"[VIDEO] TIER_TWO 账号，模型自动调整: {model_config['model_key']} -> {model_key}")
+                        yield self._create_stream_chunk(f"Ultra 账号自动切换到 ultra 模型: {model_key}\n", model=model_name)
+                    debug_logger.log_info(f"[VIDEO] Ultra 账号，模型自动调整: {model_config['model_key']} -> {model_key}")
 
-            # TIER_ONE 账号需要使用非 ultra 版本
-            elif user_tier == "PAYGATE_TIER_ONE":
+            # Pro/Standard 账号需要使用非 ultra 版本
+            else:
                 # 如果模型 key 包含 ultra，需要移除（避免用户误用）
                 if "ultra" in model_key:
                     # veo_3_1_i2v_s_fast_ultra_fl -> veo_3_1_i2v_s_fast_fl
@@ -990,8 +1008,8 @@ class GenerationHandler:
                     model_key = model_key.replace("_ultra_fl", "_fl").replace("_ultra", "")
                     
                     if stream:
-                        yield self._create_stream_chunk(f"TIER_ONE 账号自动切换到标准模型: {model_key}\n")
-                    debug_logger.log_info(f"[VIDEO] TIER_ONE 账号，模型自动调整: {model_config['model_key']} -> {model_key}")
+                        yield self._create_stream_chunk(f"{tier_name.capitalize()} 账号自动切换到标准模型: {model_key}\n", model=model_name)
+                    debug_logger.log_info(f"[VIDEO] {tier_name.capitalize()} 账号，模型自动调整: {model_config['model_key']} -> {model_key}")
 
             # 更新 model_config 中的 model_key
             model_config = dict(model_config)  # 创建副本避免修改原配置
@@ -1167,12 +1185,14 @@ class GenerationHandler:
         project_id: str,
         operations: List[Dict],
         stream: bool,
-        upsample_config: Optional[Dict] = None
+        upsample_config: Optional[Dict] = None,
+        model: str = "flow2api"
     ) -> AsyncGenerator:
         """轮询视频生成结果
         
         Args:
             upsample_config: 放大配置 {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+            model: 模型名称
         """
 
         max_attempts = config.max_poll_attempts
@@ -1199,7 +1219,7 @@ class GenerationHandler:
                 progress_update_interval = 7  # 每7次轮询 = 21秒
                 if stream and attempt % progress_update_interval == 0:  # 每20秒报告一次
                     progress = min(int((attempt / max_attempts) * 100), 95)
-                    yield self._create_stream_chunk(f"生成进度: {progress}%\n")
+                    yield self._create_stream_chunk(f"生成进度: {progress}%\n", model=model)
 
                 # 检查状态
                 if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
@@ -1218,7 +1238,7 @@ class GenerationHandler:
                     if upsample_config and video_media_id:
                         if stream:
                             resolution_name = "4K" if "4K" in upsample_config["resolution"] else "1080P"
-                            yield self._create_stream_chunk(f"\n视频生成完成，开始 {resolution_name} 放大处理...（可能需要 30 分钟）\n")
+                            yield self._create_stream_chunk(f"\n视频生成完成，开始 {resolution_name} 放大处理...（可能需要 30 分钟）\n", model=model)
                         
                         try:
                             # 提交放大任务
@@ -1234,41 +1254,41 @@ class GenerationHandler:
                             upsample_operations = upsample_result.get("operations", [])
                             if upsample_operations:
                                 if stream:
-                                    yield self._create_stream_chunk("放大任务已提交，继续轮询...\n")
+                                    yield self._create_stream_chunk("放大任务已提交，继续轮询...\n", model=model)
                                 
                                 # 递归轮询放大结果（不再放大）
                                 async for chunk in self._poll_video_result(
-                                    token, project_id, upsample_operations, stream, None
+                                    token, project_id, upsample_operations, stream, None, model=model
                                 ):
                                     yield chunk
                                 return
                             else:
                                 if stream:
-                                    yield self._create_stream_chunk("⚠️ 放大任务创建失败，返回原始视频\n")
+                                    yield self._create_stream_chunk("⚠️ 放大任务创建失败，返回原始视频\n", model=model)
                         except Exception as e:
                             debug_logger.log_error(f"Video upsample failed: {str(e)}")
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 放大失败: {str(e)}，返回原始视频\n")
+                                yield self._create_stream_chunk(f"⚠️ 放大失败: {str(e)}，返回原始视频\n", model=model)
 
                     # 缓存视频 (如果启用)
                     local_url = video_url
                     if config.cache_enabled:
                         try:
                             if stream:
-                                yield self._create_stream_chunk("正在缓存视频文件...\n")
+                                yield self._create_stream_chunk("正在缓存视频文件...\n", model=model)
                             cached_filename = await self.file_cache.download_and_cache(video_url, "video")
                             local_url = f"{self._get_base_url()}/tmp/{cached_filename}"
                             if stream:
-                                yield self._create_stream_chunk("✅ 视频缓存成功,准备返回缓存地址...\n")
+                                yield self._create_stream_chunk("✅ 视频缓存成功,准备返回缓存地址...\n", model=model)
                         except Exception as e:
                             debug_logger.log_error(f"Failed to cache video: {str(e)}")
                             # 缓存失败不影响结果返回,使用原始URL
                             local_url = video_url
                             if stream:
-                                yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}\n正在返回源链接...\n")
+                                yield self._create_stream_chunk(f"⚠️ 缓存失败: {str(e)}\n正在返回源链接...\n", model=model)
                     else:
                         if stream:
-                            yield self._create_stream_chunk("缓存已关闭,正在返回源链接...\n")
+                            yield self._create_stream_chunk("缓存已关闭,正在返回源链接...\n", model=model)
 
                     # 更新数据库
                     task_id = operation["operation"]["name"]
@@ -1287,12 +1307,14 @@ class GenerationHandler:
                     if stream:
                         yield self._create_stream_chunk(
                             f"<video src='{local_url}' controls style='max-width:100%'></video>",
-                            finish_reason="stop"
+                            finish_reason="stop",
+                            model=model
                         )
                     else:
                         yield self._create_completion_response(
                             local_url,  # 直接传URL,让方法内部格式化
-                            media_type="video"
+                            media_type="video",
+                            model=model
                         )
                     return
 
@@ -1314,7 +1336,7 @@ class GenerationHandler:
                     # 返回友好的错误消息，提示用户重试
                     friendly_error = f"视频生成失败: {error_message}，请重试"
                     if stream:
-                        yield self._create_stream_chunk(f"❌ {friendly_error}\n")
+                        yield self._create_stream_chunk(f"❌ {friendly_error}\n", model=model)
                     yield self._create_error_response(friendly_error)
                     return
 
@@ -1332,7 +1354,7 @@ class GenerationHandler:
 
     # ========== 响应格式化 ==========
 
-    def _create_stream_chunk(self, content: str, role: str = None, finish_reason: str = None) -> str:
+    def _create_stream_chunk(self, content: str, role: str = None, finish_reason: str = None, model: str = "flow2api") -> str:
         """创建流式响应chunk"""
         import json
         import time
@@ -1341,7 +1363,7 @@ class GenerationHandler:
             "id": f"chatcmpl-{int(time.time())}",
             "object": "chat.completion.chunk",
             "created": int(time.time()),
-            "model": "flow2api",
+            "model": model,
             "choices": [{
                 "index": 0,
                 "delta": {},
@@ -1359,13 +1381,14 @@ class GenerationHandler:
 
         return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
-    def _create_completion_response(self, content: str, media_type: str = "image", is_availability_check: bool = False) -> str:
+    def _create_completion_response(self, content: str, media_type: str = "image", is_availability_check: bool = False, model: str = "flow2api") -> str:
         """创建非流式响应
 
         Args:
             content: 媒体URL或纯文本消息
             media_type: 媒体类型 ("image" 或 "video")
             is_availability_check: 是否为可用性检查响应 (纯文本消息)
+            model: 模型名称
 
         Returns:
             JSON格式的响应
@@ -1387,7 +1410,7 @@ class GenerationHandler:
             "id": f"chatcmpl-{int(time.time())}",
             "object": "chat.completion",
             "created": int(time.time()),
-            "model": "flow2api",
+            "model": model,
             "choices": [{
                 "index": 0,
                 "message": {

@@ -154,17 +154,29 @@ def format_gemini_response(text_content: str, model: str) -> Dict[str, Any]:
 
 def format_gemini_chunk(text_content: str, is_last: bool = False) -> str:
     """Format streaming chunk in Gemini SSE format"""
-    chunk_data = {
-        "candidates": [{
-            "content": {
-                "parts": [{"text": text_content}],
-                "role": "model"
-            },
-            "finishReason": "STOP" if is_last else None,
-            "index": 0
-        }]
+    candidate = {
+        "content": {
+            "parts": [{"text": text_content}],
+            "role": "model"
+        },
+        "index": 0
     }
-    return f"data: {json.dumps(chunk_data)}\n\n"
+    
+    if is_last:
+        candidate["finishReason"] = "STOP"
+    else:
+        # OneAPI/OneHub prefers finishReason to be present only when stopped
+        # or defaults to null. To be safe, let's omit it if not stopped
+        # to avoid type confusion in strict parsers.
+        pass
+
+    chunk_data = {
+        "candidates": [candidate]
+    }
+    
+    # ensure_ascii=False ensures we send actual UTF-8 chars, not \uXXXX
+    # separators=(',', ':') removes whitespace to make it compact
+    return f"data: {json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
 @router.post("/v1beta/models/{model}:generateContent")
 async def generate_content(

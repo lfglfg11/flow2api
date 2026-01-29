@@ -9,11 +9,19 @@ from ..core.logger import debug_logger
 class LoadBalancer:
     """Token load balancer with random selection"""
 
-    # Tier levels mapping
+    # 简化后的等级定义
     TIER_LEVELS = {
-        "PAYGATE_TIER_ONE": 1,   # Ordinary
-        "PAYGATE_TIER_TWO": 2,   # Pro
-        "PAYGATE_TIER_THREE": 3  # Ultra
+        "standard": 1,  # 普号 (1k/Flash)
+        "pro": 2,       # 会员/Pro (2k) - 对应 PAYGATE_TIER_ONE
+        "ultra": 3      # Ultra (4k) - 对应 PAYGATE_TIER_TWO
+    }
+
+    # 上游原始字段映射
+    RAW_TIER_MAP = {
+        None: "standard",
+        "": "standard",
+        "PAYGATE_TIER_ONE": "pro",
+        "PAYGATE_TIER_TWO": "ultra"
     }
 
     def __init__(self, token_manager, concurrency_manager: Optional[ConcurrencyManager] = None):
@@ -31,10 +39,7 @@ class LoadBalancer:
         Select a token using random load balancing
 
         Args:
-            for_image_generation: If True, only select tokens with image_enabled=True
-            for_video_generation: If True, only select tokens with video_enabled=True
-            model: Model name (used to filter tokens for specific models)
-            required_tier: Minimum required PAYGATE tier (e.g. PAYGATE_TIER_TWO)
+            required_tier: "standard" | "pro" | "ultra"
         """
         debug_logger.log_info(f"[LOAD_BALANCER] 开始选择Token (图片={for_image_generation}, 视频={for_video_generation}, 模型={model}, Tier>={required_tier})")
 
@@ -49,14 +54,17 @@ class LoadBalancer:
         available_tokens = []
         filtered_reasons = {}  # 记录过滤原因
         
-        # Resolve required tier level (default 1)
+        # 1. 确定所需的数字等级 (默认 standard=1)
         req_level = self.TIER_LEVELS.get(required_tier, 1) if required_tier else 1
 
         for token in active_tokens:
-            # Check tier requirement
-            token_level = self.TIER_LEVELS.get(token.user_paygate_tier, 1) if token.user_paygate_tier else 1
+            # 2. 转换Token等级: 原始字符串 -> 简化名 -> 数字等级
+            # 默认为 standard
+            token_tier_name = self.RAW_TIER_MAP.get(token.user_paygate_tier, "standard")
+            token_level = self.TIER_LEVELS.get(token_tier_name, 1)
+
             if token_level < req_level:
-                filtered_reasons[token.id] = f"权限不足 (需Tier {req_level}, 当前Tier {token_level}/{token.user_paygate_tier})"
+                filtered_reasons[token.id] = f"权限不足 (需 {required_tier or 'standard'}, 当前 {token_tier_name})"
                 continue
 
             # Check if token has valid AT (not expired)

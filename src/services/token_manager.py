@@ -343,11 +343,16 @@ class TokenManager:
             # 验证 AT 有效性：通过 get_credits 测试
             try:
                 credits_result = await self.flow_client.get_credits(new_at)
-                await self.db.update_token(
-                    token_id,
-                    credits=credits_result.get("credits", 0)
-                )
-                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）")
+                update_data = {
+                    "credits": credits_result.get("credits", 0)
+                }
+                # 同时更新会员等级
+                if "userPaygateTier" in credits_result:
+                    update_data["user_paygate_tier"] = credits_result["userPaygateTier"]
+                
+                await self.db.update_token(token_id, **update_data)
+                
+                debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}, Tier: {credits_result.get('userPaygateTier')}）")
                 return True
             except Exception as verify_err:
                 # AT 验证失败（可能返回 401），说明 ST 已过期
@@ -581,9 +586,13 @@ class TokenManager:
         try:
             result = await self.flow_client.get_credits(token.at)
             credits = result.get("credits", 0)
+            
+            update_data = {"credits": credits}
+            if "userPaygateTier" in result:
+                update_data["user_paygate_tier"] = result["userPaygateTier"]
 
             # 更新数据库
-            await self.db.update_token(token_id, credits=credits)
+            await self.db.update_token(token_id, **update_data)
 
             return credits
         except Exception as e:
