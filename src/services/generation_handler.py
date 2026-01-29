@@ -1407,3 +1407,194 @@ class GenerationHandler:
             # 日志记录失败不影响主流程
             debug_logger.log_error(f"Failed to log request: {e}")
 
+
+    async def handle_image_api_generation(
+        self,
+        model: str,
+        prompt: str,
+        size: str = None,
+        n: int = 1,
+        images: Optional[List[bytes]] = None,
+        response_format: str = "url",
+        user: str = None
+    ) -> dict:
+        """
+        Handle standard OpenAI Image API generation request (non-streaming, JSON response).
+        """
+        import json
+        import time
+        import re
+
+        # 1. 验证模型 (使用 handle_generation中的逻辑前置检查，虽然handle_generation也会检查)
+        # 这里主要是为了快速返回
+        # 注意：handle_generation 内部有复杂的模型名解析逻辑（比如去除后缀），所以最好直接复用 handle_generation
+
+        # 收集生成的 URL
+        generated_urls = []
+        actual_model_urls = []
+        
+        # 1. 解析比例
+        # 如果提供了 size，将其转换为 prompt 后缀或直接覆盖 ratio
+        final_prompt = prompt
+        target_ratio = DEFAULT_RATIO
+        
+        # 尝试从 prompt 提取
+        _, extracted_ratio, _ = self.extract_aspect_ratio_from_prompt(prompt)
+        target_ratio = extracted_ratio
+        
+        if size:
+            # 智能映射 size 到最接近的 supported ratio (1:1, 16:9, 9:16)
+            size_ratio = None
+            ratio_val = None
+            
+            # 1. 尝试解析宽高比数值
+            if "x" in size.lower(): # 处理 1024x1024
+                try:
+                    w, h = map(int, size.lower().split("x"))
+                    ratio_val = w / h
+                except:
+                    pass
+            elif ":" in size or "：" in size: # 处理 4:3, 16:9
+                try:
+                    parts = size.replace("：", ":").split(":")
+                    w, h = map(float, parts)
+                    ratio_val = w / h
+                except:
+                    pass
+            
+            # 2. 如果解析成功，寻找最接近的候选值
+            if ratio_val is not None:
+                # 定义候选比例
+                candidates = {
+                    "1:1": 1.0,
+                    "16:9": 16/9,
+                    "9:16": 9/16
+                }
+                
+                # 寻找最接近的
+                best_ratio = "1:1"
+                min_diff = float("inf")
+                
+                for r_str, r_val in candidates.items():
+                    diff = abs(ratio_val - r_val)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_ratio = r_str
+                        
+                size_ratio = best_ratio
+            
+            # 优先级处理: Prompt > Size
+            # 如果从prompt中提取到了非默认比例，则忽略size中的比例
+            # extract_aspect_ratio_from_prompt 返回 (cleaned_prompt, ratio, config)
+            # 如果 ratio 是 DEFAULT_RATIO，说明没提取到显式比例(或显式比例就是默认值)，此时允许 size 覆盖
+            
+            _, detected_ratio, _ = self.extract_aspect_ratio_from_prompt(prompt)
+            # 修正：extract_aspect_ratio_from_prompt 在没有找到时返回 DEFAULT_RATIO
+            # 我们需要知道是否真的提取到了。
+            # 简单判断: 如果提取到的 ratio 与 DEFAULT_RATIO 不同，或者 prompt 中包含 ratio 字符串?
+            # 重新检查 extract_aspect_ratio_from_prompt 实现：
+            # 它会返回 cleaned_prompt。如果 cleaned_prompt != prompt.strip()，说明提取到了东西。
+            # 或者我们简单地：如果检测到了比例并且不是默认值，优先使用检测到的。
+            # 注意：DEFAULT_RATIO 也是一个有效比例。
+            # 更好的方式：比较 extracted_ratio 和 DEFAULT_RATIO? 
+            # 让我们看 extract_aspect_ratio_from_prompt 源码逻辑：如果没找到，返回 prompt, DEFAULT_RATIO, ...
+            
+            # 所以，如果 detected_ratio != DEFAULT_RATIO，我们认为是 Prompt 指定了。
+            # 但如果 Prompt 显式指定了和 Default 一样的比例呢？
+            # 暂时假设如果Prompt没提取到，detected_ratio 就是 DEFAULT_RATIO。
+            
+            # 为了更精准，我们直接用 prompt 文本检查比较好，或者信任 detected_ratio。
+            # 如果 Prompt 里写了 16:9，detected_ratio 就是 16:9。
+            # 如果 Size 算是 1:1。
+            # 如果 Detected != DEFAULT，那么 Prompt 赢。
+            # 如果 Detected == DEFAULT，那么可能是 Prompt 指定了 Default，也可能是没指定。
+            # 这种情况下，如果 Size 有值，我们应该用 Size 吗？
+            # 普遍逻辑：Prompt 在 Text Field 里，用户意图更强。Size 是外层参数。
+            # 通常 Prompt 覆盖 Size。
+            # 但是如果 Prompt 没写，就是 Default。此时 Size 应该生效。
+            
+            # 我们的 extract 方法在没找到时返回 Default。
+            # 所以如果 extracted_ratio == DEFAULT_RATIO，我们不能确信是提取到的还是默认的。
+            # 但我们可以比较 cleaned_prompt 和 prompt。
+            cleaned, _, _ = self.extract_aspect_ratio_from_prompt(prompt)
+            has_prompt_ratio = cleaned != prompt.strip()
+            
+            if has_prompt_ratio:
+                target_ratio = detected_ratio
+            elif size_ratio:
+                target_ratio = size_ratio
+            
+        # 2. 调用生成逻辑
+        # 循环 N 次生成
+        for _ in range(n):
+            # 使用临时 prompt
+            # 如果 prompt 里已经有了比例 (has_prompt_ratio)，我们就直接用 prompt (target_ratio 已经是提取出来的了，但我们传给 handle_generation 的是 prompt 文本)
+            # handle_generation 会再次提取。
+            # 如果 추출出来的 ratio 和 target_ratio 不一致（即 size 生效了），我们需要把 size ratio 加进去。
+            
+            effective_prompt = final_prompt
+            if size and target_ratio and target_ratio != extracted_ratio:
+                 # 只有当 size 提供了不同的比例，且 prompt 没有显式指定比例（或指定了但我们覆盖它? 不，上面逻辑是 Prompt 优先）
+                 # 如果 has extracted_ratio, target_ratio = extracted_ratio. 此时 target_ratio == extracted_ratio. 条件不满足。
+                 # 如果 no extracted_ratio, target_ratio = size_ratio. extracted_ratio = default.
+                 # 此时我们需要把 size_ratio 加到 prompt 里，以便 handle_generation 识别。
+                 effective_prompt = f"{final_prompt} {target_ratio}"
+
+            # 调用 Handle Generation
+            response_json_str = None
+            async for chunk in self.handle_generation(
+                model=model,
+                prompt=effective_prompt,
+                images=images,
+                stream=False
+            ):
+                response_json_str = chunk
+            
+            if response_json_str:
+                try:
+                    response_data = json.loads(response_json_str)
+                    # 检查是否有错误
+                    if "error" in response_data:
+                         raise Exception(response_data["error"]["message"])
+                    
+                    # 提取 Content
+                    choices = response_data.get("choices", [])
+                    if choices:
+                        content = choices[0]["message"]["content"]
+                        # Content 是 "![Generated Image](url)" 或 base64 data url
+                        # 提取 URL
+                        match = re.search(r"\((.+?)\)", content)
+                        if match:
+                            url = match.group(1)
+                            actual_model_urls.append(url)
+                        else:
+                            # 尝试直接匹配 base64
+                            if "data:image" in content:
+                                # 可能是直接的一段文本及大量base64?
+                                # 假设整个content就是base64 url 如果格式不对
+                                pass
+                except json.JSONDecodeError:
+                    pass
+            else:
+                raise Exception("Generation returned no response")
+
+        # 3. 构造 Image API 响应
+        data_items = []
+        if response_format == "b64_json":
+             # 如果需要 base64_json，但我们拿到了 URL (可能是 http 也可能是 data:image/...)
+             for url in actual_model_urls:
+                 if url.startswith("data:image"):
+                     b64 = url.split(",")[1]
+                     data_items.append({"b64_json": b64})
+                 else:
+                     # 无法直接转 b64，回退到 url 或者此处应该下载转 b64
+                     # 简单起见，暂不实现远程转本地b64
+                     data_items.append({"url": url}) 
+        else:
+             for url in actual_model_urls:
+                 data_items.append({"url": url})
+
+        return {
+            "created": int(time.time()),
+            "data": data_items
+        }
