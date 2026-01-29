@@ -62,12 +62,14 @@ MODEL_CONFIG = {
     "gemini-3.0-pro-image-2k": {
         "type": "image",
         "model_name": "GEM_PIX_2",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K"
+        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_2K",
+        "required_tier": "PAYGATE_TIER_TWO"
     },
     "gemini-3.0-pro-image-4k": {
         "type": "image",
         "model_name": "GEM_PIX_2",
-        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K"
+        "upsample": "UPSAMPLE_IMAGE_RESOLUTION_4K",
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     
     # Imagen 3.5/4.0
@@ -106,7 +108,8 @@ MODEL_CONFIG = {
             "portrait": "veo_3_1_t2v_fast_portrait"
         },
         "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     
     # Veo 2.1 Fast
@@ -133,7 +136,8 @@ MODEL_CONFIG = {
             "default": "veo_3_1_t2v_fast_ultra",
             "portrait": "veo_3_1_t2v_fast_portrait_ultra"
         },
-        "supports_images": False
+        "supports_images": False,
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     "veo_3_1_t2v_fast_ultra-1080p": {
         "type": "video",
@@ -143,7 +147,8 @@ MODEL_CONFIG = {
             "portrait": "veo_3_1_t2v_fast_portrait_ultra"
         },
         "supports_images": False,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"},
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     "veo_3_1_t2v_fast_ultra-4k": {
         "type": "video",
@@ -332,7 +337,8 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 0,
         "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     
     "veo_3_1_r2v_fast_ultra": {
@@ -344,7 +350,8 @@ MODEL_CONFIG = {
         },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None
+        "max_images": None,
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     "veo_3_1_r2v_fast_ultra-1080p": {
         "type": "video",
@@ -356,7 +363,8 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 0,
         "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_1080P", "model_key": "veo_3_1_upsampler_1080p"},
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     "veo_3_1_r2v_fast_ultra-4k": {
         "type": "video",
@@ -368,7 +376,8 @@ MODEL_CONFIG = {
         "supports_images": True,
         "min_images": 0,
         "max_images": None,
-        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"}
+        "upsample": {"resolution": "VIDEO_RESOLUTION_4K", "model_key": "veo_3_1_upsampler_4k"},
+        "required_tier": "PAYGATE_TIER_THREE"
     },
     
     "veo_3_1_r2v_fast_ultra_relaxed": {
@@ -380,7 +389,8 @@ MODEL_CONFIG = {
         },
         "supports_images": True,
         "min_images": 0,
-        "max_images": None
+        "max_images": None,
+        "required_tier": "PAYGATE_TIER_THREE"
     },
 }
 
@@ -616,11 +626,13 @@ class GenerationHandler:
 
         # 2. 选择Token
         debug_logger.log_info(f"[GENERATION] 正在选择可用Token...")
+        
+        required_tier = model_config.get("required_tier")
 
         if generation_type == "image":
-            token = await self.load_balancer.select_token(for_image_generation=True, model=model)
+            token = await self.load_balancer.select_token(for_image_generation=True, model=model, required_tier=required_tier)
         else:
-            token = await self.load_balancer.select_token(for_video_generation=True, model=model)
+            token = await self.load_balancer.select_token(for_video_generation=True, model=model, required_tier=required_tier)
 
         if not token:
             error_msg = self._get_no_token_error_message(generation_type)

@@ -9,6 +9,13 @@ from ..core.logger import debug_logger
 class LoadBalancer:
     """Token load balancer with random selection"""
 
+    # Tier levels mapping
+    TIER_LEVELS = {
+        "PAYGATE_TIER_ONE": 1,   # Ordinary
+        "PAYGATE_TIER_TWO": 2,   # Pro
+        "PAYGATE_TIER_THREE": 3  # Ultra
+    }
+
     def __init__(self, token_manager, concurrency_manager: Optional[ConcurrencyManager] = None):
         self.token_manager = token_manager
         self.concurrency_manager = concurrency_manager
@@ -17,7 +24,8 @@ class LoadBalancer:
         self,
         for_image_generation: bool = False,
         for_video_generation: bool = False,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        required_tier: Optional[str] = None
     ) -> Optional[Token]:
         """
         Select a token using random load balancing
@@ -26,11 +34,9 @@ class LoadBalancer:
             for_image_generation: If True, only select tokens with image_enabled=True
             for_video_generation: If True, only select tokens with video_enabled=True
             model: Model name (used to filter tokens for specific models)
-
-        Returns:
-            Selected token or None if no available tokens
+            required_tier: Minimum required PAYGATE tier (e.g. PAYGATE_TIER_TWO)
         """
-        debug_logger.log_info(f"[LOAD_BALANCER] 开始选择Token (图片生成={for_image_generation}, 视频生成={for_video_generation}, 模型={model})")
+        debug_logger.log_info(f"[LOAD_BALANCER] 开始选择Token (图片={for_image_generation}, 视频={for_video_generation}, 模型={model}, Tier>={required_tier})")
 
         active_tokens = await self.token_manager.get_active_tokens()
         debug_logger.log_info(f"[LOAD_BALANCER] 获取到 {len(active_tokens)} 个活跃Token")
@@ -42,8 +48,17 @@ class LoadBalancer:
         # Filter tokens based on generation type
         available_tokens = []
         filtered_reasons = {}  # 记录过滤原因
+        
+        # Resolve required tier level (default 1)
+        req_level = self.TIER_LEVELS.get(required_tier, 1) if required_tier else 1
 
         for token in active_tokens:
+            # Check tier requirement
+            token_level = self.TIER_LEVELS.get(token.user_paygate_tier, 1) if token.user_paygate_tier else 1
+            if token_level < req_level:
+                filtered_reasons[token.id] = f"权限不足 (需Tier {req_level}, 当前Tier {token_level}/{token.user_paygate_tier})"
+                continue
+
             # Check if token has valid AT (not expired)
             if not await self.token_manager.is_at_valid(token.id):
                 filtered_reasons[token.id] = "AT无效或已过期"
