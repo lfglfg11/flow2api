@@ -469,7 +469,9 @@ class GenerationHandler:
         model: str,
         prompt: str,
         images: Optional[List[bytes]] = None,
-        stream: bool = False
+        stream: bool = False,
+        aspect_ratio: str = None,
+        skip_availability_check: bool = False
     ) -> AsyncGenerator:
         """统一生成入口
 
@@ -478,12 +480,37 @@ class GenerationHandler:
             prompt: 提示词
             images: 图片列表 (bytes格式)
             stream: 是否流式输出
+            aspect_ratio: 显式指定宽高比 (如 "16:9")，优先级高于prompt提取
+            skip_availability_check: 是否跳过非流式模式下的可用性检查（强制执行生成）
         """
         start_time = time.time()
         token = None
 
-        # 1. Extract Aspect Ratio directly from prompt
-        prompt, ratio_str, ratio_config = self.extract_aspect_ratio_from_prompt(prompt)
+        # 1. Resolve Aspect Ratio
+        # Strategy: extract from prompt > explicit param > default
+        # 这里的优先级: Prompt显式指定 > API参数显式指定 > 默认值
+        
+        extracted_prompt, extracted_ratio_str, extracted_ratio_config = self.extract_aspect_ratio_from_prompt(prompt)
+        
+        # Determine if prompt actually contained a ratio
+        # extraction removes the ratio string, so if length changed (or string diff), we found one.
+        has_prompt_ratio = extracted_prompt != prompt.strip()
+        
+        ratio_str = DEFAULT_RATIO
+        ratio_config = SUPPORTED_RATIOS[DEFAULT_RATIO]
+        final_prompt = extracted_prompt
+        
+        if has_prompt_ratio:
+             # Found in prompt - Highest Priority
+             ratio_str = extracted_ratio_str
+             ratio_config = extracted_ratio_config
+        elif aspect_ratio and aspect_ratio in SUPPORTED_RATIOS:
+             # Not found in prompt, but explicit param provided
+             ratio_str = aspect_ratio
+             ratio_config = SUPPORTED_RATIOS[aspect_ratio]
+        else:
+             # Default
+             pass
         
         # Determine is_portrait for later use (Video model key selection)
         is_portrait = ratio_config.get("is_portrait", False)
@@ -558,10 +585,10 @@ class GenerationHandler:
                  else:
                      model_config["model_key"] = key_map.get("default", key_map.get("portrait", "")) # Fallback
         
-        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {base_model}, 类型: {generation_type}, 比例: {ratio_str}, Prompt: {prompt[:50]}...")
+        debug_logger.log_info(f"[GENERATION] 开始生成 - 模型: {base_model}, 类型: {generation_type}, 比例: {ratio_str}, Prompt: {final_prompt[:50]}...")
 
-        # 非流式模式: 只检查可用性
-        if not stream:
+        # 非流式模式: 只检查可用性 (除非强制跳过检查)
+        if not stream and not skip_availability_check:
             is_image = (generation_type == "image")
             is_video = (generation_type == "video")
             available = await self.check_token_availability(is_image, is_video)
@@ -632,13 +659,13 @@ class GenerationHandler:
             if generation_type == "image":
                 debug_logger.log_info(f"[GENERATION] 开始图片生成流程...")
                 async for chunk in self._handle_image_generation(
-                    token, project_id, model_config, prompt, images, stream, internal_ratio
+                    token, project_id, model_config, final_prompt, images, stream, internal_ratio
                 ):
                     yield chunk
             else:  # video
                 debug_logger.log_info(f"[GENERATION] 开始视频生成流程...")
                 async for chunk in self._handle_video_generation(
-                    token, project_id, model_config, prompt, images, stream, internal_ratio
+                    token, project_id, model_config, final_prompt, images, stream, internal_ratio
                 ):
                     yield chunk
 
@@ -1425,22 +1452,17 @@ class GenerationHandler:
         import time
         import re
 
-        # 1. 验证模型 (使用 handle_generation中的逻辑前置检查，虽然handle_generation也会检查)
-        # 这里主要是为了快速返回
-        # 注意：handle_generation 内部有复杂的模型名解析逻辑（比如去除后缀），所以最好直接复用 handle_generation
-
         # 收集生成的 URL
-        generated_urls = []
         actual_model_urls = []
         
         # 1. 解析比例
-        # 如果提供了 size，将其转换为 prompt 后缀或直接覆盖 ratio
         final_prompt = prompt
-        target_ratio = DEFAULT_RATIO
+        target_ratio = None # Default
         
         # 尝试从 prompt 提取
         _, extracted_ratio, _ = self.extract_aspect_ratio_from_prompt(prompt)
-        target_ratio = extracted_ratio
+        # 如果 Prompt 里有，它会在 handle_generation 中自动生效（extracted_ratio != DEFAULT_RATIO）
+        # 但如果我们有 size 参数，且 Prompt 没指定（或指定的是默认），size 应该生效。
         
         if size:
             # 智能映射 size 到最接近的 supported ratio (1:1, 16:9, 9:16)
@@ -1483,95 +1505,47 @@ class GenerationHandler:
                         
                 size_ratio = best_ratio
             
-            # 优先级处理: Prompt > Size
-            # 如果从prompt中提取到了非默认比例，则忽略size中的比例
-            # extract_aspect_ratio_from_prompt 返回 (cleaned_prompt, ratio, config)
-            # 如果 ratio 是 DEFAULT_RATIO，说明没提取到显式比例(或显式比例就是默认值)，此时允许 size 覆盖
+            # 决策: 如果 Prompt 里提取到了非默认比例，则 Prompt 优先。
+            # 否则，如果 size_ratio 有值，则使用 size_ratio。
             
-            _, detected_ratio, _ = self.extract_aspect_ratio_from_prompt(prompt)
-            # 修正：extract_aspect_ratio_from_prompt 在没有找到时返回 DEFAULT_RATIO
-            # 我们需要知道是否真的提取到了。
-            # 简单判断: 如果提取到的 ratio 与 DEFAULT_RATIO 不同，或者 prompt 中包含 ratio 字符串?
-            # 重新检查 extract_aspect_ratio_from_prompt 实现：
-            # 它会返回 cleaned_prompt。如果 cleaned_prompt != prompt.strip()，说明提取到了东西。
-            # 或者我们简单地：如果检测到了比例并且不是默认值，优先使用检测到的。
-            # 注意：DEFAULT_RATIO 也是一个有效比例。
-            # 更好的方式：比较 extracted_ratio 和 DEFAULT_RATIO? 
-            # 让我们看 extract_aspect_ratio_from_prompt 源码逻辑：如果没找到，返回 prompt, DEFAULT_RATIO, ...
-            
-            # 所以，如果 detected_ratio != DEFAULT_RATIO，我们认为是 Prompt 指定了。
-            # 但如果 Prompt 显式指定了和 Default 一样的比例呢？
-            # 暂时假设如果Prompt没提取到，detected_ratio 就是 DEFAULT_RATIO。
-            
-            # 为了更精准，我们直接用 prompt 文本检查比较好，或者信任 detected_ratio。
-            # 如果 Prompt 里写了 16:9，detected_ratio 就是 16:9。
-            # 如果 Size 算是 1:1。
-            # 如果 Detected != DEFAULT，那么 Prompt 赢。
-            # 如果 Detected == DEFAULT，那么可能是 Prompt 指定了 Default，也可能是没指定。
-            # 这种情况下，如果 Size 有值，我们应该用 Size 吗？
-            # 普遍逻辑：Prompt 在 Text Field 里，用户意图更强。Size 是外层参数。
-            # 通常 Prompt 覆盖 Size。
-            # 但是如果 Prompt 没写，就是 Default。此时 Size 应该生效。
-            
-            # 我们的 extract 方法在没找到时返回 Default。
-            # 所以如果 extracted_ratio == DEFAULT_RATIO，我们不能确信是提取到的还是默认的。
-            # 但我们可以比较 cleaned_prompt 和 prompt。
             cleaned, _, _ = self.extract_aspect_ratio_from_prompt(prompt)
-            has_prompt_ratio = cleaned != prompt.strip()
+            has_prompt_ratio = (cleaned != prompt.strip())
+            # 注意: 如果 detected_ratio 是 DEFAULT_RATIO，可能是 Prompt 指定了 Default，也可能是没指定。
+            # 但 has_prompt_ratio 比较文本长度变化，比较准。
             
-            if has_prompt_ratio:
-                target_ratio = detected_ratio
-            elif size_ratio:
+            if not has_prompt_ratio and size_ratio:
                 target_ratio = size_ratio
-            
+
         # 2. 调用生成逻辑
         # 循环 N 次生成
         for _ in range(n):
-            # 使用临时 prompt
-            # 如果 prompt 里已经有了比例 (has_prompt_ratio)，我们就直接用 prompt (target_ratio 已经是提取出来的了，但我们传给 handle_generation 的是 prompt 文本)
-            # handle_generation 会再次提取。
-            # 如果 추출出来的 ratio 和 target_ratio 不一致（即 size 生效了），我们需要把 size ratio 加进去。
-            
-            effective_prompt = final_prompt
-            if size and target_ratio and target_ratio != extracted_ratio:
-                 # 只有当 size 提供了不同的比例，且 prompt 没有显式指定比例（或指定了但我们覆盖它? 不，上面逻辑是 Prompt 优先）
-                 # 如果 has extracted_ratio, target_ratio = extracted_ratio. 此时 target_ratio == extracted_ratio. 条件不满足。
-                 # 如果 no extracted_ratio, target_ratio = size_ratio. extracted_ratio = default.
-                 # 此时我们需要把 size_ratio 加到 prompt 里，以便 handle_generation 识别。
-                 effective_prompt = f"{final_prompt} {target_ratio}"
-
-            # 调用 Handle Generation
+            # 调用 Handle Generation (传递显式 aspect_ratio)
             response_json_str = None
             async for chunk in self.handle_generation(
                 model=model,
-                prompt=effective_prompt,
+                prompt=final_prompt, # 不修改 Prompt 文本
                 images=images,
-                stream=False
+                stream=False,
+                aspect_ratio=target_ratio, # 显式传递
+                skip_availability_check=True # 强制生成，不进行可用性检查
             ):
                 response_json_str = chunk
             
             if response_json_str:
                 try:
                     response_data = json.loads(response_json_str)
-                    # 检查是否有错误
                     if "error" in response_data:
                          raise Exception(response_data["error"]["message"])
                     
-                    # 提取 Content
                     choices = response_data.get("choices", [])
                     if choices:
                         content = choices[0]["message"]["content"]
-                        # Content 是 "![Generated Image](url)" 或 base64 data url
-                        # 提取 URL
                         match = re.search(r"\((.+?)\)", content)
                         if match:
                             url = match.group(1)
                             actual_model_urls.append(url)
                         else:
-                            # 尝试直接匹配 base64
                             if "data:image" in content:
-                                # 可能是直接的一段文本及大量base64?
-                                # 假设整个content就是base64 url 如果格式不对
                                 pass
                 except json.JSONDecodeError:
                     pass
@@ -1581,14 +1555,11 @@ class GenerationHandler:
         # 3. 构造 Image API 响应
         data_items = []
         if response_format == "b64_json":
-             # 如果需要 base64_json，但我们拿到了 URL (可能是 http 也可能是 data:image/...)
              for url in actual_model_urls:
                  if url.startswith("data:image"):
                      b64 = url.split(",")[1]
                      data_items.append({"b64_json": b64})
                  else:
-                     # 无法直接转 b64，回退到 url 或者此处应该下载转 b64
-                     # 简单起见，暂不实现远程转本地b64
                      data_items.append({"url": url}) 
         else:
              for url in actual_model_urls:

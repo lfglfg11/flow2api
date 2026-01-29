@@ -429,8 +429,23 @@ class FlowClient:
         if aspect_ratio.startswith("VIDEO_"):
             aspect_ratio = aspect_ratio.replace("VIDEO_", "IMAGE_")
 
-        # 自动检测图片 MIME 类型
-        mime_type = self._detect_image_mime_type(image_bytes)
+        # 尝试转换为 JPEG (upstream 似乎对格式很挑剔)
+        # 使用线程池执行图像处理，避免阻塞主线程 (CPU密集型)
+        try:
+            import asyncio
+            from functools import partial
+            
+            loop = asyncio.get_running_loop()
+            # 在线程池中运行同步的 PIL 操作
+            image_bytes = await loop.run_in_executor(
+                None, 
+                partial(self._convert_to_jpeg, image_bytes)
+            )
+            mime_type = "image/jpeg"
+        except Exception as e:
+            # Conversion failed, fallback to detection
+            debug_logger.log_warning(f"Image conversion to JPEG failed: {str(e)}")
+            mime_type = self._detect_image_mime_type(image_bytes)
 
         # 编码为base64 (去掉前缀)
         image_base64 = base64.b64encode(image_bytes).decode('utf-8')

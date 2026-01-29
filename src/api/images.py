@@ -94,7 +94,7 @@ async def create_image_generation(
 @router.post("/v1/images/edits")
 async def create_image_edit(
     prompt: str = Form(...),
-    image: UploadFile = File(...),
+    image: Union[List[UploadFile], UploadFile] = File(...),
     mask: Optional[UploadFile] = File(None),
     model: Optional[str] = Form(None),
     n: Optional[int] = Form(1),
@@ -106,18 +106,28 @@ async def create_image_edit(
     """
     Edit or variation of an image.
     Flow2API treats this as Image-to-Image generation logic.
+    Supports multiple existing images for reference if provided.
     """
     if not generation_handler:
         raise HTTPException(status_code=500, detail="Generation handler not initialized")
 
-    # Read image
+    # Read images
+    images_bytes_list = []
+    
+    # Normalize to list
+    files = image if isinstance(image, list) else [image]
+    
     try:
-        image_bytes = await image.read()
+        for file in files:
+            content = await file.read()
+            if len(content) > 0:
+                images_bytes_list.append(content)
+                
     except Exception as e:
-         raise HTTPException(status_code=400, detail=f"Failed to read image: {str(e)}")
+         raise HTTPException(status_code=400, detail=f"Failed to read image files: {str(e)}")
 
-    if len(image_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Image is empty")
+    if not images_bytes_list:
+        raise HTTPException(status_code=400, detail="Image(s) must be provided")
     
     # We currently accept mask but don't strictly use it in flow logic yet (as I2I is main flow)
     # If upstream supports mask, we could pass it. But Flow usually just takes init image.
@@ -131,7 +141,7 @@ async def create_image_edit(
             prompt=prompt,
             size=size,
             n=n,
-            images=[image_bytes],
+            images=images_bytes_list,
             response_format=response_format,
             user=user
         )
