@@ -204,7 +204,8 @@ async def create_chat_completion(
                 model=request.model,
                 prompt=prompt,
                 images=images if images else None,
-                stream=False
+                stream=False,
+                skip_availability_check=True
             ):
                 result = chunk
 
