@@ -1,41 +1,19 @@
-# 切换到 gbf 分支
+# 1. 切换到 gbf 分支
 git checkout gbf
 
-# 创建 Docker 构建工作流（自动构建镜像）
-cat > .github/workflows/build-docker.yml << 'EOF'
-name: Build Docker Image
+# 2. 打开原工作流文件（注意路径！）
+code .github/workflows/docker-publish.yml
 
+# 3. 修改触发分支（只改这里！）
 on:
   push:
-    branches: [ gbf ]  # 仅 gbf 分支更新时触发
-
-permissions:
-  contents: read
-  packages: write  # 推送镜像到 GitHub Container Registry
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/lfglfg11/flow2api:gbf
-EOF
-
-# 提交到 gbf 分支
-git add .github/workflows/build-docker.yml
-git commit -m "chore: add docker build workflow"
-git push origin gbf
+    branches:
+      - main
+      - gbf  # ← 添加这一行（关键！）
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - gbf  # ← 添加这一行
+  workflow_dispatch:
