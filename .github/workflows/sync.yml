@@ -1,0 +1,47 @@
+# 1. 切换到 main 分支（关键！）
+git checkout main
+
+# 2. 拉取最新上游代码（保持干净）
+git pull upstream main
+
+# 3. 创建目录和文件
+mkdir -p .github/workflows
+cat > .github/workflows/sync.yml << 'EOF'
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - run: |
+          git remote add upstream https://github.com/TheSmallHanCat/flow2api.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main --ff-only
+          git push origin main
+
+      - run: |
+          git checkout gbf || exit 0  # 如果gbf不存在则跳过
+          git rebase main && git push origin gbf --force-with-lease || {
+            echo "⚠️ Conflict on gbf branch"
+            exit 1
+          }
+EOF
+
+# 4. 提交到 main
+git add .github/workflows/sync.yml
+git commit -m "chore: add auto-sync workflow"
+git push origin main
