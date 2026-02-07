@@ -43,3 +43,25 @@
 
 ---
 *注：以上修改均已通过测试（curl/python client），并针对高并发场景进行了非阻塞优化。*
+
+# 开发日志 (2026-02-08)
+
+## 1. Gemini 接口返回格式对齐
+### 1.1 非流式响应标准化
+- **补齐核心字段**: 增加 `usageMetadata`、`createTime`、`responseId`、`id`、`object`、`created`、`choices`、`usage`。
+- **Token 统计映射**: 从上游 OpenAI `usage` 映射到 Gemini `usageMetadata` 与 `usage`。
+
+### 1.2 流式响应标准化
+- **SSE 数据结构对齐**: 流式输出使用 Gemini `candidates` 结构，结束包附带 `finishReason=STOP`。
+- **结束信号修正**: 遇到上游 `[DONE]` 时，转换为 Gemini 结束包，避免非标准结束标记。
+
+### 1.3 请求参数兼容
+- **generationConfig 支持**: 解析 `generationConfig` 与 `generation_config` 两种写法，确保与官方文档一致。
+
+## 2. Gemini 图片返回内联修正
+### 2.1 图片 parts 结构
+- **inline_data 对齐**: 将生成图片放入 `candidates.content.parts.inline_data`，避免落在外层文本或 `choices` 中。
+- **图片提取与编码**: 识别 Markdown 图片链接或 data URI，必要时下载并转为 base64 以符合 Gemini 规范。
+
+### 2.2 流式结束包修正
+- **标准结束包**: 在流式结束时补发携带 `inline_data` 的结束包（`finishReason=STOP`）。

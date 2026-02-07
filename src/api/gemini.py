@@ -1,6 +1,8 @@
 """Gemini API routes"""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+import base64
+import imghdr
 import json
 import re
 import time
@@ -56,7 +58,7 @@ def set_generation_handler(handler: GenerationHandler):
 async def parse_gemini_content(body: Dict[str, Any]) -> tuple[str, List[bytes], Dict[str, Any]]:
     """Parse Gemini request body to extract prompt and images"""
     contents = body.get("contents", [])
-    generation_config = body.get("generation_config", {})
+    generation_config = body.get("generationConfig") or body.get("generation_config", {})
     
     prompt_parts = []
     images: List[bytes] = []
@@ -137,23 +139,173 @@ async def parse_gemini_content(body: Dict[str, Any]) -> tuple[str, List[bytes], 
     final_prompt = "\n".join(prompt_parts).strip()
     return final_prompt, images, generation_config
 
-def format_gemini_response(text_content: str, model: str) -> Dict[str, Any]:
-    """Format final response in Gemini JSON format"""
+def _build_usage_metadata(openai_usage: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build Gemini usageMetadata from OpenAI usage if available."""
+    usage = openai_usage or {}
+    prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+    total_tokens = int(usage.get("total_tokens", prompt_tokens + completion_tokens) or 0)
+
     return {
-        "candidates": [{
-            "content": {
-                "parts": [{"text": text_content}],
-                "role": "model"
-            },
-            "finishReason": "STOP",
+        "promptTokenCount": prompt_tokens,
+        "candidatesTokenCount": completion_tokens,
+        "totalTokenCount": total_tokens,
+        "trafficType": "ON_DEMAND",
+        "promptTokensDetails": [],
+        "candidatesTokensDetails": []
+    }
+
+
+def _guess_mime_type(image_url: str, image_bytes: Optional[bytes]) -> str:
+    """Best-effort mime type guessing for inline images."""
+    url = image_url.lower()
+    if url.startswith("data:image/"):
+        match = re.match(r"data:(image/[^;]+);base64,", url)
+        if match:
+            return match.group(1)
+
+    if url.endswith(".png"):
+        return "image/png"
+    if url.endswith(".webp"):
+        return "image/webp"
+    if url.endswith(".gif"):
+        return "image/gif"
+    if url.endswith(".jpg") or url.endswith(".jpeg"):
+        return "image/jpeg"
+
+    if image_bytes:
+        detected = imghdr.what(None, h=image_bytes)
+        if detected == "png":
+            return "image/png"
+        if detected == "webp":
+            return "image/webp"
+        if detected == "gif":
+            return "image/gif"
+        if detected == "jpeg":
+            return "image/jpeg"
+
+    return "image/jpeg"
+
+
+async def _image_url_to_inline_data(image_url: str) -> Optional[Dict[str, Any]]:
+    """Convert image URL or data URI to Gemini inline_data."""
+    if image_url.startswith("data:image/"):
+        match = re.match(r"data:(image/[^;]+);base64,(.+)", image_url, re.DOTALL)
+        if not match:
+            return None
+        mime_type = match.group(1)
+        data = match.group(2).replace("\n", "").replace("\r", "").strip()
+        return {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": data
+            }
+        }
+
+    if image_url.startswith("http://") or image_url.startswith("https://") or "/tmp/" in image_url:
+        image_bytes = await retrieve_image_data(image_url)
+        if not image_bytes:
+            return None
+        mime_type = _guess_mime_type(image_url, image_bytes)
+        encoded = base64.b64encode(image_bytes).decode("ascii")
+        return {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": encoded
+            }
+        }
+
+    return None
+
+
+async def _build_gemini_parts(text_content: str) -> List[Dict[str, Any]]:
+    """Build Gemini content.parts from markdown text and images."""
+    if not text_content:
+        return []
+
+    pattern = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+    parts: List[Dict[str, Any]] = []
+    last_end = 0
+
+    for match in pattern.finditer(text_content):
+        if match.start() > last_end:
+            text_part = text_content[last_end:match.start()].strip()
+            if text_part:
+                parts.append({"text": text_part})
+
+        image_url = match.group(1).strip()
+        inline_part = await _image_url_to_inline_data(image_url)
+        if inline_part:
+            parts.append(inline_part)
+        else:
+            parts.append({"text": image_url})
+
+        last_end = match.end()
+
+    tail = text_content[last_end:].strip()
+    if tail:
+        parts.append({"text": tail})
+
+    if not parts:
+        parts.append({"text": text_content})
+
+    return parts
+
+
+def _parts_has_inline_data(parts: List[Dict[str, Any]]) -> bool:
+    return any("inline_data" in part for part in parts)
+
+
+def format_gemini_response(
+    text_content: str,
+    model: str,
+    openai_usage: Optional[Dict[str, Any]] = None,
+    parts: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """Format final response in Gemini JSON format."""
+    response_id = f"gemini-{uuid.uuid4().hex}"
+    created = int(time.time())
+    create_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(created))
+
+    final_parts = parts or ([{"text": text_content}] if text_content else [])
+    candidate = {
+        "content": {
+            "parts": final_parts,
+            "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0,
+        "safetyRatings": []
+    }
+
+    usage_metadata = _build_usage_metadata(openai_usage)
+
+    return {
+        "candidates": [candidate],
+        "usageMetadata": usage_metadata,
+        "modelVersion": model,
+        "createTime": create_time,
+        "responseId": response_id,
+        "id": response_id,
+        "object": "generateContent",
+        "created": created,
+        "choices": [{
             "index": 0,
-            "safetyRatings": []
+            "message": {
+                "role": "assistant",
+                "content": text_content
+            },
+            "finish_reason": "stop"
         }],
-        "modelVersion": model
+        "usage": {
+            "prompt_tokens": usage_metadata["promptTokenCount"],
+            "completion_tokens": usage_metadata["candidatesTokenCount"],
+            "total_tokens": usage_metadata["totalTokenCount"]
+        }
     }
 
 def format_gemini_chunk(text_content: str, is_last: bool = False) -> str:
-    """Format streaming chunk in Gemini SSE format"""
+    """Format streaming chunk in Gemini SSE format."""
     candidate = {
         "content": {
             "parts": [{"text": text_content}],
@@ -161,22 +313,34 @@ def format_gemini_chunk(text_content: str, is_last: bool = False) -> str:
         },
         "index": 0
     }
-    
+
     if is_last:
         candidate["finishReason"] = "STOP"
-    else:
-        # OneAPI/OneHub prefers finishReason to be present only when stopped
-        # or defaults to null. To be safe, let's omit it if not stopped
-        # to avoid type confusion in strict parsers.
-        pass
 
     chunk_data = {
         "candidates": [candidate]
     }
-    
-    # ensure_ascii=False ensures we send actual UTF-8 chars, not \uXXXX
-    # separators=(',', ':') removes whitespace to make it compact
-    return f"data: {json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+    return f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
+
+
+def format_gemini_chunk_parts(parts: List[Dict[str, Any]], is_last: bool = False) -> str:
+    """Format streaming chunk with full parts (used for image inline_data)."""
+    candidate = {
+        "content": {
+            "parts": parts,
+            "role": "model"
+        },
+        "index": 0
+    }
+    if is_last:
+        candidate["finishReason"] = "STOP"
+
+    chunk_data = {
+        "candidates": [candidate]
+    }
+
+    return f"data: {json.dumps(chunk_data, separators=(',', ':'))}\n\n"
 
 @router.post("/v1beta/models/{model}:generateContent")
 async def generate_content(
@@ -207,6 +371,8 @@ async def generate_content(
     # We use stream=False to get the full result, then wrap it
     
     final_text = ""
+    openai_usage = None
+    gemini_parts: List[Dict[str, Any]] = []
     try:
         # We need to accumulate the response (which is OpenAI JSON format)
         openai_json_resp = None
@@ -224,6 +390,7 @@ async def generate_content(
             # Parse OpenAI response to get the content (image url markdown)
             try:
                 data = json.loads(openai_json_resp)
+                openai_usage = data.get("usage")
                 
                 # Check for error first
                 if "error" in data:
@@ -237,10 +404,13 @@ async def generate_content(
 
                 if "choices" in data and len(data["choices"]) > 0:
                     final_text = data["choices"][0]["message"]["content"]
+                    gemini_parts = await _build_gemini_parts(final_text)
             except Exception as e:
                 # If it was our raised exception, re-raise
-                if str(e) == data.get("error", {}).get("message"):
-                     raise HTTPException(status_code=500, detail=f"Generation error: {str(e)}")
+                if isinstance(e, HTTPException):
+                    raise
+                if "data" in locals() and str(e) == data.get("error", {}).get("message"):
+                    raise HTTPException(status_code=500, detail=f"Generation error: {str(e)}")
                 
                 # Otherwise fall back
                 final_text = str(openai_json_resp)
@@ -251,7 +421,7 @@ async def generate_content(
         debug_logger.log_error(f"Gemini generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    return format_gemini_response(final_text, model)
+    return format_gemini_response(final_text, model, openai_usage, gemini_parts)
 
 @router.post("/v1beta/models/{model}:streamGenerateContent")
 async def stream_generate_content(
@@ -275,6 +445,7 @@ async def stream_generate_content(
     async def generate_stream():
         # Call generation handler (streaming)
         # It yields OpenAI SSE lines: "data: { ... }" or "data: [DONE]"
+        full_text = ""
         try:
             async for chunk in generation_handler.handle_generation(
                 model=model,
@@ -287,7 +458,12 @@ async def stream_generate_content(
                 if chunk.startswith("data: "):
                     content_str = chunk[6:].strip()
                     if content_str == "[DONE]":
-                        break
+                        parts = await _build_gemini_parts(full_text)
+                        if parts and _parts_has_inline_data(parts):
+                            yield format_gemini_chunk_parts(parts, is_last=True)
+                        else:
+                            yield format_gemini_chunk("", is_last=True)
+                        return
                     try:
                         data = json.loads(content_str)
                         # Extract delta content
@@ -296,6 +472,7 @@ async def stream_generate_content(
                             delta = data["choices"][0].get("delta", {})
                             text_part = delta.get("content", "")
                             if text_part:
+                                full_text += text_part
                                 yield format_gemini_chunk(text_part)
                     except:
                         pass
